@@ -1,17 +1,40 @@
-local unreal = {}
+local unreal = {
+    defaults = {
+        os = 'linux',
+        unreal_dir = '/opt/unreal-engine',
+    },
+}
 
-function unreal.setup() end
+unreal.au_id = vim.api.nvim_create_augroup('FileWatcher', { clear = true })
+
+function unreal.setup(config)
+    assert(type(config) == table, 'The setup function requires a table')
+    for i, v in pairs(config) do
+        unreal.defaults[i] = v
+    end
+end
 
 function unreal.Start()
-    -- code
+    vim.api.nvim_create_autocmd('VimLeave', {
+        group = unreal.au_id,
+        callback = function()
+            print 'Closing event'
+            require('Unreal.watcher').End()
+        end,
+    })
+
+    require('Unreal.watcher').Start()
 end
 
 function unreal.End()
-    -- code
+    require('Unreal.watcher').End()
 end
 
 function unreal.generate()
-    -- code
+    local compile_commands = vim.loop.fs_stat 'compile_commands.json'
+    if not compile_commands then
+        require('Unreal.watcher').watcher()
+    end
 end
 
 return unreal

@@ -1,7 +1,7 @@
 local uv = vim.loop
-local M = { watch_file = nil, uht_dir = nil, uht_inc = nil, id_dir = nil }
+local M = {}
 
-M.au_id = vim.api.nvim_create_augroup('FileWatcher', { clear = true })
+local properties = require 'Unreal.properties'(true, false)
 
 function M.readFileSync(path)
     local fd = assert(uv.fs_open(path, 'r', 438))
@@ -17,63 +17,11 @@ function M.WriteFileSync(path, data)
     assert(uv.fs_close(fd))
 end
 
-local proj_name = vim.b.unreal_dir or vim.fn.fnamemodify(vim.fn.getcwd(), ':t')
-local proj_dir = uv.cwd()
-local vscode_dir = uv.fs_stat(proj_dir .. '/.vscode')
-
-if vscode_dir and vscode_dir.type == 'directory' then
-    if vim.loop.fs_stat(proj_dir .. '/.vscode/compileCommands_' .. proj_name .. '.json') then
-        M.watch_file = proj_dir .. '/.vscode/compileCommands_' .. proj_name .. '.json'
-    end
-end
-
-if M.watch_file == nil then
-    vim.notify(
-        'Project files have not been generated. Please run `UnrealBuildTool` and retrigger `VimEnter` autocmd',
-        vim.log.levels.ERROR
-    )
-    return
-end
-
-local function get_header_dir()
-    local id_dir = proj_dir .. '/Intermediate/Build/Linux'
-
-    if not uv.fs_stat(id_dir) then
-        vim.notify(
-            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd',
-            vim.log.levels.ERROR
-        )
-        return
-    end
-
-    local id
-    for file, file_type in vim.fs.dir(id_dir, { depth = 1 }) do
-        if file_type == 'directory' then
-            id = file
-        end
-    end
-    M.id_dir = id_dir .. '/' .. id
-
-    local h_dir = M.id_dir .. '/UnrealEditor/Inc/' .. proj_name .. '/UHT'
-
-    if not uv.fs_stat(h_dir) then
-        vim.notify(
-            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd',
-            vim.log.levels.ERROR
-        )
-        return
-    end
-    return h_dir
-end
-
-M.header_loc = get_header_dir()
-
-function M.get_header_loc()
-    M.uht_inc = M.id_dir .. '/' .. proj_name .. 'Editor/Development/'
+function M.get_project_files(paths)
     local header_dirs = {}
 
-    if uv.fs_stat(M.uht_inc) then
-        for file, file_type in vim.fs.dir(M.uht_inc, { depth = 1 }) do
+    for _, path in ipairs(paths) do
+        for file, file_type in vim.fs.dir(path, { depth = 1 }) do
             if file_type == 'directory' then
                 for f, ft in vim.fs.dir(M.uht_inc .. file, { depth = 1 }) do
                     local ext = vim.fn.fnamemodify(f, ':e')
@@ -85,33 +33,23 @@ function M.get_header_loc()
                         end
                     end
                 end
-                -- table.insert(header_dirs, M.uht_inc .. file)
             end
         end
-        return header_dirs
     end
+    return header_dirs
 end
 
-if not M.header_loc then
-    vim.notify(
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd',
-        vim.log.levels.ERROR
-    )
-    return
-end
-
-function M.get_headers()
+function M.get_engine_files(paths)
     local header_files = {}
-    if uv.fs_stat(M.header_loc) then
-        for file, file_type in vim.fs.dir(M.header_loc, { depth = 1 }) do
+    for _, path in ipairs(paths) do
+        for file, file_type in vim.fs.dir(path, { depth = 1 }) do
             local ext = vim.fn.fnamemodify(file, ':e')
             if file_type == 'file' and (ext == 'h' or ext == 'cpp' or ext == 'hpp') then
                 table.insert(header_files, file)
             end
         end
-        return header_files
     end
-    return nil
+    return header_files
 end
 
 function M.watcher(err, prev, curr)
@@ -126,15 +64,14 @@ function M.watcher(err, prev, curr)
     local command =
         '/opt/unreal-engine/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v20_clang-13.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++'
 
-    local headers = M.get_headers()
-    local includes = M.get_header_loc()
+    local headers = M.get_engine_files { properties.dirs_to_watch.engine.editor }
+    local includes =
+        M.get_project_files { properties.dirs_to_watch.project.game, properties.dirs_to_watch.project.editor }
 
     for i, v in ipairs(js) do
         for k, va in pairs(v) do
             if k == 'arguments' then
                 if vim.tbl_contains(va, command) then
-                    -- js[i].command = command
-                    -- table.remove(js[i][k], 2)
                     for _, g in ipairs(headers) do
                         table.insert(js[i][k], '-I' .. M.header_loc .. '/' .. g)
                     end
@@ -152,19 +89,7 @@ end
 
 M.event = uv.new_fs_event()
 
-vim.api.nvim_create_autocmd('VimLeave', {
-    group = M.au_id,
-    callback = function()
-        uv.close(M.event)
-        print 'Closing event'
-    end,
-})
-
 function M.Start()
-    local compile_commands = uv.fs_stat 'compile_commands.json'
-    if not compile_commands then
-        M.watcher()
-    end
     uv.fs_event_start(
         M.event,
         '/storage/Games/Unreal/NeovimTrial/.vscode/',
