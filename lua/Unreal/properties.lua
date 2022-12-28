@@ -1,14 +1,8 @@
 local props = {
     dirs_to_watch = {
         compile_commands = nil,
-        engine = {
-            game = nil,
-            editor = nil,
-        },
-        project = {
-            game = nil,
-            editor = nil,
-        },
+        engine = nil,
+        project = nil,
     },
     project = {
         name = nil,
@@ -69,39 +63,43 @@ local function get_id()
     return path .. '/' .. id
 end
 
-local function get_engine_module(type)
-    local path = props.project.partials_dir .. '/Unreal' .. type .. '/Inc/' .. props.project.name .. '/UHT'
+local function get_engine_module()
+    local editor_path = props.project.partials_dir .. '/UnrealEditor' .. '/Inc/' .. props.project.name .. '/UHT'
+    local files = {}
     assert(
-        is_dir(path),
+        is_dir(editor_path),
         'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd'
     )
-    return path
+    files.editor = editor_path
+    local game_path = props.project.partials_dir .. '/UnrealGame' .. '/Inc/' .. props.project.name .. '/UHT'
+    if is_dir(game_path) then
+        files.game = game_path
+    end
+    return files
 end
 
-local function get_project_module(type)
-    local path = props.project.partials_dir .. '/' .. props.project.name .. type .. '/Development'
+local function get_project_module()
+    local game_path = props.project.partials_dir .. '/' .. props.project.name .. '/Development'
+    local files = {}
     assert(
-        is_dir(path),
+        is_dir(game_path),
         'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd'
     )
-    return path
+    files.game = game_path
+    local editor_path = props.project.partials_dir .. '/' .. props.project.name .. 'Editor/Development'
+    if is_dir(editor_path) then
+        files.editor = editor_path
+    end
+    return files
 end
 
-return function(is_editor, is_game)
+return function()
     props.project.name = get_name()
     props.project.cwd = uv.cwd()
     props.project.partials_dir = get_id()
     props.dirs_to_watch.compile_commands = get_compile_commands()
-    props.dirs_to_watch.engine.game = get_engine_module 'Game'
+    props.dirs_to_watch.engine = get_engine_module()
+    props.dirs_to_watch.project = get_project_module()
 
-    if is_game then
-        props.dirs_to_watch.engine.editor = get_engine_module 'Editor'
-    end
-
-    props.dirs_to_watch.project.game = get_project_module ''
-
-    if is_editor then
-        props.dirs_to_watch.project.editor = get_project_module 'Editor'
-    end
     return props
 end
