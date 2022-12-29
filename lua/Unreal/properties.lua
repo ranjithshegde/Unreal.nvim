@@ -19,10 +19,7 @@ end
 
 local function is_dir(path)
     local fd = is_file(path)
-    if not fd then
-        return nil
-    end
-    return fd.type == 'directory'
+    return fd and fd.type == 'directory'
 end
 
 local function get_name()
@@ -48,12 +45,14 @@ end
 local function get_id()
     local path = props.project.cwd .. '/Intermediate/Build'
 
-    if not require('Unreal').defaults.os then
-        local os = jit.os
-        if os == 'Linux' then
-            path = path .. '/Linux'
-        elseif os:find 'Windows' then
+    local os = jit.os
+    if os == 'Linux' then
+        path = path .. '/Linux'
+    elseif os:find 'Windows' then
+        if is_dir(path .. '/Win64') then
             path = path .. '/Win64'
+        elseif is_dir(path .. '/Win32') then
+            path = path .. '/Win32'
         end
     end
 
@@ -62,6 +61,10 @@ local function get_id()
         'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
             .. path
     )
+
+    if os == 'Windows' then
+        return path
+    end
 
     local id
     for file, file_type in vim.fs.dir(path, { depth = 1 }) do

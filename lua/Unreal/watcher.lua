@@ -25,8 +25,8 @@ function watcher.get_project_files(paths)
         for file, file_type in vim.fs.dir(path, { depth = 1 }) do
             if file_type == 'directory' then
                 for f, ft in vim.fs.dir(path .. '/' .. file, { depth = 1 }) do
-                    local ext = vim.fn.fnamemodify(f, ':e')
                     if ft == 'file' then
+                        local ext = vim.fn.fnamemodify(f, ':e')
                         if ext == 'h' or ext == 'cpp' or ext == 'hpp' then
                             table.insert(header_dirs, '-I' .. path .. '/' .. file .. '/' .. f)
                         elseif ext == 'response' then
@@ -63,8 +63,12 @@ function watcher.Update(err, _, _)
     local js = vim.json.decode(data)
     assert(js, 'Failed to decode json file')
 
-    local command = require('Unreal').defaults.unreal_dir
-        .. '/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v20_clang-13.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++'
+    local command = ''
+    if jit.os == 'Linux' then
+        command = [[bin/clang++]]
+    elseif jit.os == 'Windows' then
+        command = [[cl.exe]]
+    end
 
     local headers = watcher.get_engine_files { properties.dirs_to_watch.engine.editor }
     local includes =
@@ -73,7 +77,7 @@ function watcher.Update(err, _, _)
     for i, v in ipairs(js) do
         for k, va in pairs(v) do
             if k == 'arguments' then
-                if vim.tbl_contains(va, command) then
+                if va[1]:find(command) then
                     for _, g in ipairs(headers) do
                         table.insert(js[i][k], g)
                     end
