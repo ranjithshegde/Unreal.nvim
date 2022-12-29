@@ -46,11 +46,21 @@ local function get_compile_commands()
 end
 
 local function get_id()
-    local path = props.project.cwd .. '/Intermediate/Build/Linux'
+    local path = props.project.cwd .. '/Intermediate/Build'
+
+    if not require('Unreal').defaults.os then
+        local os = jit.os
+        if os == 'Linux' then
+            path = path .. '/Linux'
+        elseif os:find 'Windows' then
+            path = path .. '/Win64'
+        end
+    end
 
     assert(
         is_dir(path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd'
+        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+            .. path
     )
 
     local id
@@ -59,7 +69,11 @@ local function get_id()
             id = file
         end
     end
-    assert(id, 'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd')
+    assert(
+        id,
+        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd. Failure at: '
+            .. id
+    )
     return path .. '/' .. id
 end
 
@@ -68,7 +82,8 @@ local function get_engine_module()
     local files = {}
     assert(
         is_dir(editor_path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd'
+        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+            .. editor_path
     )
     files.editor = editor_path
     local game_path = props.project.partials_dir .. '/UnrealGame' .. '/Inc/' .. props.project.name .. '/UHT'
@@ -79,16 +94,31 @@ local function get_engine_module()
 end
 
 local function get_project_module()
-    local game_path = props.project.partials_dir .. '/' .. props.project.name .. '/Development'
+    local game_path = props.project.partials_dir .. '/' .. props.project.name .. 'Editor/'
     local files = {}
     assert(
         is_dir(game_path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd'
+        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+            .. game_path
     )
-    files.game = game_path
-    local editor_path = props.project.partials_dir .. '/' .. props.project.name .. 'Editor/Development'
+    if is_dir(game_path .. 'Development') then
+        files.game = game_path .. 'Development'
+    elseif is_dir(game_path .. 'DebugGame') then
+        files.game = game_path .. 'DebugGame'
+    else
+        error(
+            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+                .. game_path
+        )
+    end
+
+    local editor_path = props.project.partials_dir .. '/' .. props.project.name
     if is_dir(editor_path) then
-        files.editor = editor_path
+        if is_dir(editor_path .. '/Development') then
+            files.editor = editor_path .. '/Development'
+        elseif is_dir(editor_path .. '/DebugGame') then
+            files.editor = editor_path .. '/DebugGame'
+        end
     end
     return files
 end

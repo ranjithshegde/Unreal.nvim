@@ -53,7 +53,7 @@ function watcher.get_engine_files(paths)
     return header_files
 end
 
-function watcher.watcher(err, _, _)
+function watcher.Update(err, _, _)
     if err then
         print(vim.inspect(err))
         return
@@ -63,8 +63,8 @@ function watcher.watcher(err, _, _)
     local js = vim.json.decode(data)
     assert(js, 'Failed to decode json file')
 
-    local command =
-        '/opt/unreal-engine/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v20_clang-13.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++'
+    local command = require('Unreal').defaults.unreal_dir
+        .. '/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v20_clang-13.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++'
 
     local headers = watcher.get_engine_files { properties.dirs_to_watch.engine.editor }
     local includes =
@@ -92,11 +92,14 @@ end
 watcher.event = uv.new_fs_event()
 
 function watcher.Start()
+    if not uv.fs_stat 'compile_commands.json' then
+        watcher.Update()
+    end
     uv.fs_event_start(
         watcher.event,
-        '/storage/Games/Unreal/NeovimTrial/.vscode/',
+        properties.project.cwd .. '/.vscode',
         { watch_entry = true, stat = true, recursive = false },
-        watcher.watcher
+        watcher.Update
     )
 end
 

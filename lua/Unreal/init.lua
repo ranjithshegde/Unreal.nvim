@@ -8,7 +8,7 @@ local unreal = {
 unreal.au_id = vim.api.nvim_create_augroup('FileWatcher', { clear = true })
 
 function unreal.setup(config)
-    assert(type(config) == table, 'The setup function requires a table')
+    assert(type(config) == 'table', 'The setup function requires a table')
     for i, v in pairs(config) do
         unreal.defaults[i] = v
     end
@@ -33,7 +33,7 @@ end
 function unreal.generate()
     local compile_commands = vim.loop.fs_stat 'compile_commands.json'
     if not compile_commands then
-        require('Unreal.watcher').watcher()
+        require('Unreal.watcher').Update()
     end
 end
 
