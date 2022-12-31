@@ -26,10 +26,7 @@ function unreal.End()
 end
 
 function unreal.generate()
-    local compile_commands = vim.loop.fs_stat 'compile_commands.json'
-    if not compile_commands then
-        pcall(require('Unreal.watcher').Update)
-    end
+    pcall(require('Unreal.watcher').generate)
 end
 
 return unreal
