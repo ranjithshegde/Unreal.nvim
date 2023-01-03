@@ -8,32 +8,18 @@ local props = {
     project = {
         name = nil,
         cwd = nil,
-        partials_dir = nil,
         plugins = {},
-        id = nil,
     },
 }
 
-local function asserter(callback, arg, files, tool)
-    local results = callback(arg)
-    if not results then
-        vim.notify(
-            string.format(
-                '%s files have not been generated. Please rerun `%s` and restart nvim. Failure at: %s',
-                files,
-                tool,
-                arg
-            ),
-            vim.log.levels.WARN,
-            { title = 'Unreal.nvim' }
-        )
-        return
-    else
-        return results
+local uv = vim.loop
+
+local function dir_find(path, dir, tbl)
+    local current = vim.fs.find(dir, { type = 'directory', path = path })
+    if current and not vim.tbl_isempty(current) then
+        table.insert(tbl, current[1])
     end
 end
-
-local uv = vim.loop
 
 local function is_file(path)
     return uv.fs_stat(path)
@@ -64,80 +50,100 @@ local function get_compile_commands()
     return file
 end
 
-local function get_id()
-    local path = props.project.cwd .. '/Intermediate/Build'
-    local os = jit.os
+local function get_build_files(path)
+    local search_path = nil
+    local dirs = { engine_modules = {}, project_modules = {} }
 
-    if os == 'Linux' then
-        path = path .. '/Linux'
-    elseif os:find 'Windows' then
-        if is_dir(path .. '/Win64') then
-            path = path .. '/Win64'
-        elseif is_dir(path .. '/Win32') then
-            path = path .. '/Win32'
+    if path then
+        if not is_dir(path) then
+            vim.notify(
+                'Plugins have not been compiled. They will not be wathced',
+                vim.log.levels.WARN,
+                { title = 'Unreal.nvim' }
+            )
+        else
+            search_path = path
+        end
+    else
+        search_path = props.project.cwd .. '/Intermediate/Build'
+
+        assert(
+            is_dir(search_path),
+            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+                .. search_path
+        )
+    end
+
+    local engine_modules = { 'UnrealEditor', 'UnrealGame' }
+    local project_modules = { props.project.name .. 'Editor', props.project.name }
+
+    for _, v in ipairs(engine_modules) do
+        dir_find(search_path, v, dirs.engine_modules)
+    end
+
+    for _, v in ipairs(project_modules) do
+        dir_find(search_path, v, dirs.project_modules)
+    end
+
+    if vim.tbl_isempty(dirs.engine_modules) or vim.tbl_isempty(dirs.project_modules) then
+        if path then
+            vim.notify(
+                'Plugins have not been compiled. They will not be wathced',
+                vim.log.levels.WARN,
+                { title = 'Unreal.nvim' }
+            )
+            return
+        else
+            error(
+                'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+                    .. search_path
+            )
         end
     end
 
-    assert(
-        is_dir(path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
-            .. path
-    )
-
-    if os == 'Windows' then
-        return path
-    end
-
-    local id
-    vim.pretty_print(id)
-
-    for file, file_type in vim.fs.dir(path, { depth = 1 }) do
-        if file_type == 'directory' then
-            id = file
-        end
-    end
-
-    assert(
-        is_dir(id),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
-            .. id
-    )
-
-    return path .. '/' .. id
+    return dirs
 end
 
-local function get_plugin_id(path)
-    local os = jit.os
-    if os == 'Linux' then
-        path = path .. '/Linux'
-    elseif os:find 'Windows' then
-        if is_dir(path .. '/Win64') then
-            path = path .. '/Win64'
-        elseif is_dir(path .. '/Win32') then
-            path = path .. '/Win32'
+local function get_engine_module(paths)
+    local dirs = {}
+    for _, path in ipairs(paths) do
+        local temp = path .. '/Inc/' .. props.project.name .. '/UHT'
+        if is_dir(temp) then
+            table.insert(dirs, temp)
+        end
+    end
+    assert(
+        not vim.tbl_isempty(dirs),
+        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd!'
+    )
+    return dirs
+end
+
+local function get_project_module(paths, plugin)
+    local files = {}
+    local types = { 'DebugGame', 'Development' }
+
+    for _, path in ipairs(paths) do
+        for _, type in ipairs(types) do
+            if is_dir(path .. '/' .. type) then
+                table.insert(files, path .. '/' .. type)
+            end
         end
     end
 
-    if not asserter(is_dir, path, 'Header files', 'Unreal Header Tool') then
-        return
-    end
-
-    if os == 'Windows' then
-        return path
-    end
-
-    local id
-    for file, file_type in vim.fs.dir(path, { depth = 1 }) do
-        if file_type == 'directory' then
-            id = file
+    if vim.tbl_isempty(files) then
+        if plugin then
+            vim.notify(
+                'Plugins have not been compiled. They will not be wathced',
+                vim.log.levels.WARN,
+                { title = 'Unreal.nvim' }
+            )
+            return
+        else
+            error 'Classes have not been compiled. Please run `UnrealBuildTool` and retrigger `VimEnter` autocmd!'
         end
     end
-
-    if not asserter(is_dir, id, 'Header files', 'Unreal Header Tool') then
-        return
-    end
-
-    return path .. '/' .. id
+    return files
 end
 
 local function get_plugins()
@@ -149,65 +155,18 @@ local function get_plugins()
             local plugin_path = path .. name
             if is_file(plugin_path .. '/' .. name .. '.uplugin') then
                 props.project.plugins[name] = { path = plugin_path }
-                local id = get_plugin_id(plugin_path)
-                if id then
-                    props.project.plugins[name].partials_dir = id
-                end
+                -- local plugin_folders = get_build_files(plugin_path)
+                -- if plugin_folders then
+                --     props.dirs_to_watch.plugins[name] = get_project_module(plugin_folders.project_modules, true)
+                -- end
             end
         end
     end
 end
 
-local function get_engine_module()
-    local editor_path = props.project.partials_dir .. '/UnrealEditor' .. '/Inc/' .. props.project.name .. '/UHT'
-    local files = {}
-    assert(
-        is_dir(editor_path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
-            .. editor_path
-    )
-    files.editor = editor_path
-    local game_path = props.project.partials_dir .. '/UnrealGame' .. '/Inc/' .. props.project.name .. '/UHT'
-    if is_dir(game_path) then
-        files.game = game_path
-    end
-    return files
-end
-
-local function get_project_module()
-    local game_path = props.project.partials_dir .. '/' .. props.project.name .. 'Editor/'
-    local files = {}
-    assert(
-        is_dir(game_path),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
-            .. game_path
-    )
-    if is_dir(game_path .. 'Development') then
-        files.game = game_path .. 'Development'
-    elseif is_dir(game_path .. 'DebugGame') then
-        files.game = game_path .. 'DebugGame'
-    else
-        error(
-            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
-                .. game_path
-        )
-    end
-
-    local editor_path = props.project.partials_dir .. '/' .. props.project.name
-    if is_dir(editor_path) then
-        if is_dir(editor_path .. '/Development') then
-            files.editor = editor_path .. '/Development'
-        elseif is_dir(editor_path .. '/DebugGame') then
-            files.editor = editor_path .. '/DebugGame'
-        end
-    end
-    return files
-end
-
 return function()
     props.project.name = get_name()
     props.project.cwd = uv.cwd()
-    props.project.partials_dir = get_id()
 
     if is_dir 'Plugins' then
         get_plugins()
@@ -219,8 +178,10 @@ return function()
     end
 
     props.dirs_to_watch.compile_commands = get_compile_commands()
-    props.dirs_to_watch.engine = get_engine_module()
-    props.dirs_to_watch.project = get_project_module()
+
+    local files = get_build_files()
+    props.dirs_to_watch.engine = get_engine_module(files.engine_modules)
+    props.dirs_to_watch.project = get_project_module(files.project_modules)
 
     return props
 end

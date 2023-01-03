@@ -74,56 +74,37 @@ function watcher.generate()
     end
 
     -- local headers = watcher.get_engine_files { properties.dirs_to_watch.engine.editor }
-    local includes =
-        watcher.get_project_files { properties.dirs_to_watch.project.game, properties.dirs_to_watch.project.editor }
+    local includes = watcher.get_project_files(properties.dirs_to_watch.project)
 
     for i, v in ipairs(js) do
         if v.arguments and v.arguments[1]:find(command) then
+            for _, g in ipairs(includes) do
+                table.insert(js[i].arguments, g)
+            end
             if v.file and v.file:find 'Plugins' then
                 for pname, pval in pairs(properties.project.plugins) do
                     if v.file:find(pname) then
-                        local files = watcher.get_project_files(pval.partials_dir)
-                        for _, f in pairs(files) do
-                            table.insert(js[i].arguments, f)
+                        local files = watcher.get_project_files(properties.dirs_to_watch.plugins[pname])
+                        if files and not vim.tbl_isempty(files) then
+                            for _, f in pairs(files) do
+                                table.insert(js[i].arguments, f)
+                            end
+                        else
+                            print 'No files found'
                         end
                     end
-                end
-            else
-                for _, g in ipairs(includes) do
-                    table.insert(js[i].arguments, g)
                 end
             end
         end
 
-        -- for k, va in pairs(v) do
-        -- if k == 'arguments' then
-        -- if va[1]:find(command) then
         -- for _, g in ipairs(headers) do
         --     table.insert(js[i][k], g)
-        -- end
-        -- for _, f in pairs(properties.dirs_to_watch.engine) do
-        --     table.insert(js[i][k], '-I' .. f .. '/')
-        -- end
-        -- for _, g in ipairs(includes) do
-        --     table.insert(js[i][k], g)
-        -- end
-        -- end
-        -- end
-        -- if k == 'file' and v:find 'Plugins' then
-        --     for pname, pval in pairs(properties.project.plugins) do
-        --         if v:find(pname) then
-        --             local files = watcher.get_project_files(pval.partials_dir)
-        --             for _, f in pairs(files) do
-        --                 table.insert(js[i][k], f)
-        --             end
-        --         end
-        --     end
-        -- end
         -- end
     end
 
     local back_js = vim.json.encode(js)
     watcher.WriteFileSync('compile_commands.json', back_js)
+    vim.notify('compile_commands.json updated!', vim.log.levels.INFO, { title = 'Unreal.nvim' })
 end
 
 function watcher.callback(err, filename, events)
