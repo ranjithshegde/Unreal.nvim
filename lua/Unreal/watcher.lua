@@ -59,6 +59,21 @@ function watcher.get_engine_files(paths)
     return header_files
 end
 
+local function get_plugin_files(dirs, file, table)
+    for pname, pval in pairs(dirs) do
+        if file:find(pname) then
+            local files = watcher.get_project_files(properties.dirs_to_watch.plugins[pname])
+            if files and not vim.tbl_isempty(files) then
+                for _, f in pairs(files) do
+                    table.insert(table, f)
+                end
+                -- else
+                --     print 'No files found'
+            end
+        end
+    end
+end
+
 function watcher.generate()
     vim.notify('Regenerating compile_commands', vim.log.levels.INFO, { title = 'Unreal.nvim' })
 
@@ -82,18 +97,7 @@ function watcher.generate()
                 table.insert(js[i].arguments, g)
             end
             if v.file and v.file:find 'Plugins' then
-                for pname, pval in pairs(properties.project.plugins) do
-                    if v.file:find(pname) then
-                        local files = watcher.get_project_files(properties.dirs_to_watch.plugins[pname])
-                        if files and not vim.tbl_isempty(files) then
-                            for _, f in pairs(files) do
-                                table.insert(js[i].arguments, f)
-                            end
-                        else
-                            print 'No files found'
-                        end
-                    end
-                end
+                get_plugin_files(properties.project.plugins, v.file, js[i].arguments)
             end
         end
 

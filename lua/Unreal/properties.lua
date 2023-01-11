@@ -9,8 +9,11 @@ local props = {
         name = nil,
         cwd = nil,
         plugins = {},
+        type = nil,
     },
 }
+
+local project_types = { PROJECT = 1, PLUGIN = 2 }
 
 local uv = vim.loop
 
@@ -33,8 +36,13 @@ end
 local function get_name()
     local cwd = uv.cwd()
     local name = vim.fn.fnamemodify(cwd, ':t')
-    assert(is_file(name .. '.uproject'), 'Not inside a Unreal project directory')
-    return name
+    if is_file(name .. '.uproject') then
+        return name, project_types.PROJECT
+    elseif is_file(name .. '.uplugin') then
+        return name, project_types.PLUGIN
+    else
+        error 'Not inside a Unreal project directory'
+    end
 end
 
 local function get_compile_commands()
@@ -57,7 +65,7 @@ local function get_build_files(path)
     if path then
         if not is_dir(path) then
             vim.notify(
-                'Plugins have not been compiled. They will not be wathced',
+                'Plugins have not been compiled or they do not contain C++ classes. They will not be wathced',
                 vim.log.levels.WARN,
                 { title = 'Unreal.nvim' }
             )
@@ -69,7 +77,7 @@ local function get_build_files(path)
 
         assert(
             is_dir(search_path),
-            'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+            'Header files have not been generated. Please run `UnrealHeaderTool` and rerun `require("Unreal").Start()`! Failure at: '
                 .. search_path
         )
     end
@@ -85,6 +93,29 @@ local function get_build_files(path)
         dir_find(search_path, v, dirs.project_modules)
     end
 
+    if vim.tbl_isempty(dirs.project_modules) then
+        local function skip(f)
+            if f == 'UnrealGame' or f == 'UnrealEditor' then
+                return false
+            end
+            return true
+        end
+        for file, file_type in pairs(vim.fs.dir(search_path, { depth = 2, skip = skip })) do
+            if file_type == 'directory' then
+                -- if file:find 'Game' and file ~= 'UnrealGame' then
+                --     table.insert(dirs.project_modules, file)
+                -- elseif file:find 'Editor' and file ~= 'UnrealEditor' then
+                --     table.insert(dirs.project_modules, file)
+                -- end
+                if file:find 'Game' then
+                    table.insert(dirs.project_modules, file)
+                elseif file:find 'Editor' then
+                    table.insert(dirs.project_modules, file)
+                end
+            end
+        end
+    end
+
     if vim.tbl_isempty(dirs.engine_modules) or vim.tbl_isempty(dirs.project_modules) then
         if path then
             vim.notify(
@@ -95,7 +126,7 @@ local function get_build_files(path)
             return
         else
             error(
-                'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd! Failure at: '
+                'Header files have not been generated. Please run `UnrealHeaderTool` and rerun `require("Unreal").Start()`! Failure at: '
                     .. search_path
             )
         end
@@ -114,7 +145,7 @@ local function get_engine_module(paths)
     end
     assert(
         not vim.tbl_isempty(dirs),
-        'Header files have not been generated. Please run `UnrealHeaderTool` and retrigger `VimEnter` autocmd!'
+        'Header files have not been generated. Please run `UnrealHeaderTool` and rerun `require("Unreal").Start()`!'
     )
     return dirs
 end
@@ -140,7 +171,7 @@ local function get_project_module(paths, plugin)
             )
             return
         else
-            error 'Classes have not been compiled. Please run `UnrealBuildTool` and retrigger `VimEnter` autocmd!'
+            error 'Classes have not been compiled. Please run `UnrealBuildTool` and rerun `require("Unreal").Start()`!'
         end
     end
     return files
@@ -165,7 +196,7 @@ local function get_plugins()
 end
 
 return function()
-    props.project.name = get_name()
+    props.project.name, props.project.type = get_name()
     props.project.cwd = uv.cwd()
 
     if is_dir 'Plugins' then
