@@ -100,7 +100,7 @@ local function get_build_files(path)
             end
             return true
         end
-        for file, file_type in pairs(vim.fs.dir(search_path, { depth = 2, skip = skip })) do
+        for file, file_type in vim.fs.dir(search_path, { depth = 2, skip = skip }) do
             if file_type == 'directory' then
                 -- if file:find 'Game' and file ~= 'UnrealGame' then
                 --     table.insert(dirs.project_modules, file)
@@ -143,6 +143,28 @@ local function get_engine_module(paths)
             table.insert(dirs, temp)
         end
     end
+
+    if vim.tbl_isempty(dirs) then
+        local function skip(f)
+            if f == 'UnrealGame' or f == 'UnrealEditor' then
+                return false
+            end
+            return true
+        end
+        for _, path in ipairs(paths) do
+            local temp = path .. '/Inc/'
+            for file, file_type in vim.fs.dir(temp, { depth = 2, skip = skip }) do
+                if file_type == 'directory' then
+                    if file:find 'Game' then
+                        table.insert(dirs, file)
+                    elseif file:find 'Editor' then
+                        table.insert(dirs, file)
+                    end
+                end
+            end
+        end
+    end
+
     assert(
         not vim.tbl_isempty(dirs),
         'Header files have not been generated. Please run `UnrealHeaderTool` and rerun `require("Unreal").Start()`!'
