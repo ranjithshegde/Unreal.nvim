@@ -48,12 +48,12 @@ end
 local function get_compile_commands()
     assert(
         is_dir '.vscode',
-        'Project files have not been generated. Please run `UnrealBuildTool -VSCode` and retrigger `VimEnter` autocmd'
+        'Project files have not been generated. Please run `UnrealBuildTool .. -VSCode` and rerun `require("Unreal").start()`'
     )
     local file = props.project.cwd .. '/.vscode/compileCommands_' .. props.project.name .. '.json'
     assert(
         is_file(file),
-        'Project files have not been generated. Please run `UnrealBuildTool -VSCode` and retrigger `VimEnter` autocmd'
+        'Project files have not been generated. Please run `UnrealBuildTool .. -VSCode` and rerun  `require("Unreal").start()`'
     )
     return file
 end
@@ -85,36 +85,35 @@ local function get_build_files(path)
     local engine_modules = { 'UnrealEditor', 'UnrealGame' }
     local project_modules = { props.project.name .. 'Editor', props.project.name }
 
-    for _, v in ipairs(engine_modules) do
-        dir_find(search_path, v, dirs.engine_modules)
-    end
+    dir_find(search_path, 'UHT', dirs.engine_modules)
+    dir_find(search_path, 'Development', dirs.project_modules)
+    dir_find(search_path, 'DebugGame', dirs.project_modules)
 
-    for _, v in ipairs(project_modules) do
-        dir_find(search_path, v, dirs.project_modules)
-    end
+    -- for _, v in ipairs(engine_modules) do
+    --     dir_find(search_path, v, dirs.engine_modules)
+    -- end
 
-    if vim.tbl_isempty(dirs.project_modules) then
-        local function skip(f)
-            if f == 'UnrealGame' or f == 'UnrealEditor' then
-                return false
-            end
-            return true
-        end
-        for file, file_type in vim.fs.dir(search_path, { depth = 2, skip = skip }) do
-            if file_type == 'directory' then
-                -- if file:find 'Game' and file ~= 'UnrealGame' then
-                --     table.insert(dirs.project_modules, file)
-                -- elseif file:find 'Editor' and file ~= 'UnrealEditor' then
-                --     table.insert(dirs.project_modules, file)
-                -- end
-                if file:find 'Game' then
-                    table.insert(dirs.project_modules, file)
-                elseif file:find 'Editor' then
-                    table.insert(dirs.project_modules, file)
-                end
-            end
-        end
-    end
+    -- for _, v in ipairs(project_modules) do
+    --     dir_find(search_path, v, dirs.project_modules)
+    -- end
+
+    -- if vim.tbl_isempty(dirs.project_modules) then
+    --     local function skip(f)
+    --         if f == 'UnrealGame' or f == 'UnrealEditor' then
+    --             return false
+    --         end
+    --         return true
+    --     end
+    --     for file, file_type in vim.fs.dir(search_path, { depth = 2, skip = skip }) do
+    --         if file_type == 'directory' then
+    --             if file:find 'Game' then
+    --                 table.insert(dirs.project_modules, file)
+    --             elseif file:find 'Editor' then
+    --                 table.insert(dirs.project_modules, file)
+    --             end
+    --         end
+    --     end
+    -- end
 
     if vim.tbl_isempty(dirs.engine_modules) or vim.tbl_isempty(dirs.project_modules) then
         if path then
@@ -233,8 +232,9 @@ return function()
     props.dirs_to_watch.compile_commands = get_compile_commands()
 
     local files = get_build_files()
-    props.dirs_to_watch.engine = get_engine_module(files.engine_modules)
-    props.dirs_to_watch.project = get_project_module(files.project_modules)
+    -- props.dirs_to_watch.engine = get_engine_module(files.engine_modules)
+    -- props.dirs_to_watch.project = get_project_module(files.project_modules)
+    props.dirs_to_watch.project = files.project_modules
 
     return props
 end

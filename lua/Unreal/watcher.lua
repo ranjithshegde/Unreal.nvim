@@ -44,23 +44,23 @@ function watcher.get_project_files(paths)
     return header_dirs
 end
 
-function watcher.get_engine_files(paths)
-    local header_files = {}
-    for _, path in pairs(paths) do
-        for file, file_type in vim.fs.dir(path, { depth = 1 }) do
-            if file_type == 'file' then
-                local ext = file:match '[^.]+$'
-                if ext == 'h' or ext == 'cpp' or ext == 'hpp' then
-                    table.insert(header_files, '-I' .. path .. '/' .. file)
-                end
-            end
-        end
-    end
-    return header_files
-end
+-- function watcher.get_engine_files(paths)
+--     local header_files = {}
+--     for _, path in pairs(paths) do
+--         for file, file_type in vim.fs.dir(path, { depth = 1 }) do
+--             if file_type == 'file' then
+--                 local ext = file:match '[^.]+$'
+--                 if ext == 'h' or ext == 'cpp' or ext == 'hpp' then
+--                     table.insert(header_files, '-I' .. path .. '/' .. file)
+--                 end
+--             end
+--         end
+--     end
+--     return header_files
+-- end
 
 local function get_plugin_files(dirs, file, table)
-    for pname, pval in pairs(dirs) do
+    for pname, _ in pairs(dirs) do
         if file:find(pname) then
             local files = watcher.get_project_files(properties.dirs_to_watch.plugins[pname])
             if files and not vim.tbl_isempty(files) then
