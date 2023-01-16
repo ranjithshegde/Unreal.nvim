@@ -2,7 +2,9 @@ local uv = vim.loop
 
 local watcher = {}
 
+local c_files = { 'h', 'hpp', 'cpp' }
 local properties = require 'Unreal.properties'()
+local plugin_names = vim.tbl_keys(properties.dirs_to_watch.plugins)
 
 function watcher.dump()
     vim.pretty_print(properties)
@@ -31,7 +33,7 @@ function watcher.get_project_files(paths)
                 for f, ft in vim.fs.dir(path .. '/' .. file, { depth = 1 }) do
                     if ft == 'file' then
                         local ext = f:match '[^.]+$'
-                        if ext == 'h' or ext == 'cpp' or ext == 'hpp' then
+                        if vim.tbl_contains(c_files, ext) then
                             table.insert(header_dirs, '-I' .. path .. '/' .. file .. '/' .. f)
                         elseif ext == 'response' then
                             table.insert(header_dirs, '@' .. path .. '/' .. file .. '/' .. f)
@@ -42,36 +44,6 @@ function watcher.get_project_files(paths)
         end
     end
     return header_dirs
-end
-
--- function watcher.get_engine_files(paths)
---     local header_files = {}
---     for _, path in pairs(paths) do
---         for file, file_type in vim.fs.dir(path, { depth = 1 }) do
---             if file_type == 'file' then
---                 local ext = file:match '[^.]+$'
---                 if ext == 'h' or ext == 'cpp' or ext == 'hpp' then
---                     table.insert(header_files, '-I' .. path .. '/' .. file)
---                 end
---             end
---         end
---     end
---     return header_files
--- end
-
-local function get_plugin_files(dirs, file, table)
-    for pname, _ in pairs(dirs) do
-        if file:find(pname) then
-            local files = watcher.get_project_files(properties.dirs_to_watch.plugins[pname])
-            if files and not vim.tbl_isempty(files) then
-                for _, f in pairs(files) do
-                    table.insert(table, f)
-                end
-                -- else
-                --     print 'No files found'
-            end
-        end
-    end
 end
 
 function watcher.generate()
@@ -88,7 +60,6 @@ function watcher.generate()
         command = [[cl.exe]]
     end
 
-    -- local headers = watcher.get_engine_files { properties.dirs_to_watch.engine.editor }
     local includes = watcher.get_project_files(properties.dirs_to_watch.project)
 
     for i, v in ipairs(js) do
@@ -97,13 +68,16 @@ function watcher.generate()
                 table.insert(js[i].arguments, g)
             end
             if v.file and v.file:find 'Plugins' then
-                get_plugin_files(properties.project.plugins, v.file, js[i].arguments)
+                for _, name in ipairs(plugin_names) do
+                    if v.file:find(name) then
+                        local files = watcher.get_project_files(properties.dirs_to_watch.plugins[name])
+                        for _, g in ipairs(files) do
+                            table.insert(js[i].arguments, g)
+                        end
+                    end
+                end
             end
         end
-
-        -- for _, g in ipairs(headers) do
-        --     table.insert(js[i][k], g)
-        -- end
     end
 
     local back_js = vim.json.encode(js)
