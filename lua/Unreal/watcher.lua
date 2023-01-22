@@ -61,6 +61,11 @@ function watcher.generate()
     end
 
     local includes = watcher.get_project_files(properties.dirs_to_watch.project)
+    if properties.dirs_to_watch.engine then
+        for _, v in ipairs(properties.dirs_to_watch.engine) do
+            table.insert(includes, '-I' .. v .. '/')
+        end
+    end
 
     for i, v in ipairs(js) do
         if v.arguments and v.arguments[1]:find(command) then

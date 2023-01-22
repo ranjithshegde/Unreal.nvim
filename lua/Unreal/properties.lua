@@ -136,9 +136,8 @@ return function()
     props.dirs_to_watch.compile_commands = get_compile_commands()
 
     local files = get_build_files()
-    -- props.dirs_to_watch.engine = get_engine_module(files.engine_modules)
-    -- props.dirs_to_watch.project = get_project_module(files.project_modules)
     props.dirs_to_watch.project = files.project_modules
+    props.dirs_to_watch.engine = files.engine_modules
 
     return props
 end
