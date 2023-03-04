@@ -87,9 +87,25 @@ function watcher.generate()
 
     for i, v in ipairs(js) do
         if properties.project.type == 3 then
-            local args = vim.split(v.command, ' ')
-            for j, c in ipairs(args) do
-                args[j] = c:gsub('"', ''):gsub([[\]], '')
+            local args
+            if properties.os == 'Windows' then
+                local temp_str = v.command:gsub([[\"]], ''):gsub('"', '')
+                args = vim.split(temp_str, '@')
+                for j, c in ipairs(args) do
+                    if j == 1 then
+                        local len = c:len()
+                        local str = c:sub(len, len)
+                        if str == ' ' then
+                            args[j] = c:sub(1, len - 1)
+                        end
+                    end
+                    if j > 1 then
+                        args[j] = '@' .. args[j]
+                    end
+                end
+            else
+                local temp_str = v.command:gsub('"', ''):gsub([[\]], '')
+                args = vim.split(temp_str, ' ')
             end
             table.insert(args, '@' .. native_flags_path)
             v.command = nil
