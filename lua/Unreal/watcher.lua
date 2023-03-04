@@ -6,6 +6,17 @@ local c_files = { 'h', 'hpp', 'cpp' }
 local properties = require 'Unreal.properties'()
 local plugin_names = vim.tbl_keys(properties.dirs_to_watch.plugins)
 
+local native_flags = [[
+-D__INTELLISENSE__
+-std=c++20
+-ferror-limit=0
+-Wall
+-Wextra
+-Wpedantic
+-Wshadow-all
+-Wno-unused-parameter
+]]
+
 function watcher.dump()
     vim.pretty_print(properties)
 end
@@ -49,16 +60,23 @@ end
 function watcher.generate()
     vim.notify('Regenerating compile_commands', vim.log.levels.INFO, { title = 'Unreal.nvim' })
 
+    local command = ''
+    if properties.os == 'Linux' then
+        command = [[bin/clang++]]
+    elseif properties.os == 'Windows' then
+        command = [[cl.exe]]
+    end
+
+    local native_flags_path = properties.project.cwd .. '/clang-flags.txt'
+    if properties.project.type == 3 then
+        if not vim.loop.fs_stat(native_flags_path) then
+            watcher.WriteFileSync(native_flags_path, native_flags)
+        end
+    end
+
     local data = watcher.readFileSync(properties.dirs_to_watch.compile_commands)
     local js = vim.json.decode(data)
     assert(js, 'Failed to decode json file')
-
-    local command = ''
-    if jit.os == 'Linux' then
-        command = [[bin/clang++]]
-    elseif jit.os == 'Windows' then
-        command = [[cl.exe]]
-    end
 
     local includes = watcher.get_project_files(properties.dirs_to_watch.project)
     if properties.dirs_to_watch.engine then
@@ -68,16 +86,26 @@ function watcher.generate()
     end
 
     for i, v in ipairs(js) do
-        if v.arguments and v.arguments[1]:find(command) then
-            for _, g in ipairs(includes) do
-                table.insert(js[i].arguments, g)
+        if properties.project.type == 3 then
+            local args = vim.split(v.command, ' ')
+            for j, c in ipairs(args) do
+                args[j] = c:gsub('"', ''):gsub([[\]], '')
             end
-            if v.file and v.file:find 'Plugins' then
-                for _, name in ipairs(plugin_names) do
-                    if v.file:find(name) then
-                        local files = watcher.get_project_files(properties.dirs_to_watch.plugins[name])
-                        for _, g in ipairs(files) do
-                            table.insert(js[i].arguments, g)
+            table.insert(args, '@' .. native_flags_path)
+            v.command = nil
+            v.arguments = args
+        else
+            if v.arguments and v.arguments[1]:find(command) then
+                for _, g in ipairs(includes) do
+                    table.insert(js[i].arguments, g)
+                end
+                if v.file and v.file:find 'Plugins' then
+                    for _, name in ipairs(plugin_names) do
+                        if v.file:find(name) then
+                            local files = watcher.get_project_files(properties.dirs_to_watch.plugins[name])
+                            for _, g in ipairs(files) do
+                                table.insert(js[i].arguments, g)
+                            end
                         end
                     end
                 end

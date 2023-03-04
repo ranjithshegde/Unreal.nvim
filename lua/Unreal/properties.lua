@@ -11,16 +11,25 @@ local props = {
         plugins = {},
         type = nil,
     },
+    os = nil,
 }
 
-local project_types = { PROJECT = 1, PLUGIN = 2 }
+local project_types = { PROJECT = 1, PLUGIN = 2, NATIVE = 3 }
 
 local uv = vim.loop
 
-local function dir_find(path, dir, tbl)
-    local current = vim.fs.find(dir, { type = 'directory', path = path })
+local function dir_find(path, dir, tbl, prefer_editor)
+    local current = vim.fs.find(dir, { type = 'directory', path = path, limit = prefer_editor and math.huge or 1 })
     if current and not vim.tbl_isempty(current) then
-        table.insert(tbl, current[1])
+        if prefer_editor then
+            for _, v in ipairs(current) do
+                if v:find 'Editor' and not v:find 'UnrealEditor' then
+                    table.insert(tbl, v)
+                end
+            end
+        else
+            table.insert(tbl, current[1])
+        end
     end
 end
 
@@ -40,6 +49,18 @@ local function get_name()
         return name, project_types.PROJECT
     elseif is_file(name .. '.uplugin') then
         return name, project_types.PLUGIN
+    elseif
+        vim.fs.find(function(fname, path)
+            return fname:match '.*%.uprojectdirs$' and path == uv.cwd()
+        end, { type = 'file', path = uv.cwd() })
+    then
+        local newname = vim.fs.find(function(fname, path)
+            return fname:match '.*%.uproject$'
+        end, { type = 'file', path = uv.cwd() })[1]
+        if newname then
+            name = vim.fn.fnamemodify(newname, ':p:h:t')
+        end
+        return name, project_types.NATIVE
     else
         error 'Not inside a Unreal project directory'
     end
@@ -50,7 +71,16 @@ local function get_compile_commands()
         is_dir '.vscode',
         'Project files have not been generated. Please run `UnrealBuildTool .. -VSCode` and rerun `require("Unreal").start()`'
     )
-    local file = props.project.cwd .. '/.vscode/compileCommands_' .. props.project.name .. '.json'
+    local file
+    if props.project.type == 3 then
+        if is_file(props.project.cwd .. '/compile_commands.json') then
+            file = props.project.cwd .. '/compile_commands.json'
+        else
+            file = props.project.cwd .. '/.vscode/compileCommands_Default.json'
+        end
+    else
+        file = props.project.cwd .. '/.vscode/compileCommands_' .. props.project.name .. '.json'
+    end
     assert(
         is_file(file),
         'Project files have not been generated. Please run `UnrealBuildTool .. -VSCode` and rerun  `require("Unreal").start()`'
@@ -73,7 +103,11 @@ local function get_build_files(path)
             search_path = path
         end
     else
-        search_path = props.project.cwd .. '/Intermediate/Build'
+        if props.project.type == 3 then
+            search_path = props.project.cwd .. '/' .. props.project.name .. '/Intermediate/Build'
+        else
+            search_path = props.project.cwd .. '/Intermediate/Build'
+        end
 
         assert(
             is_dir(search_path),
@@ -83,9 +117,14 @@ local function get_build_files(path)
     end
 
     dir_find(search_path, 'UHT', dirs.engine_modules)
-    dir_find(search_path, 'Development', dirs.project_modules)
+    dir_find(search_path, 'Development', dirs.project_modules, true)
+
     if vim.tbl_isempty(dirs.project_modules) then
-        dir_find(search_path, 'DebugGame', dirs.project_modules)
+        if props.project.type == 3 then
+            dir_find(search_path, 'Debug', dirs.project_modules, true)
+        else
+            dir_find(search_path, 'DebugGame', dirs.project_modules, true)
+        end
     end
 
     if vim.tbl_isempty(dirs.engine_modules) or vim.tbl_isempty(dirs.project_modules) then
@@ -128,6 +167,8 @@ end
 return function()
     props.project.name, props.project.type = get_name()
     props.project.cwd = uv.cwd()
+
+    props.os = jit.os
 
     if is_dir 'Plugins' then
         get_plugins()
